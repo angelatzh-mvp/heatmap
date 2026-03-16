@@ -314,7 +314,7 @@
 
     const prompt = `分析品牌 "${handle}"。流量高峰：${topT || '無資料'}，訂單高峰：${topO || '無資料'}。回傳 JSON：{"insights": ["重點1","重點2","重點3"],"suggestions": ["建議1","建議2","建議3"]}`;
 
-    try {
+try {
         const FUNCTION_URL = window.location.hostname.includes('localhost') 
             ? 'http://localhost:8888/.netlify/functions/gemini' 
             : '/.netlify/functions/gemini';
@@ -328,13 +328,28 @@
         if (!response.ok) throw new Error("後端呼叫失敗");
 
         const result = await response.json();
-        const data = result.text ? JSON.parse(result.text) : result;
-        renderAIHTML(data);
+        
+        // --- 核心修正點：雙重解析邏輯 ---
+        let finalData;
+        try {
+            // 如果後端回傳的是字串，則解析它；如果是物件，則直接使用
+            finalData = typeof result.text === 'string' ? JSON.parse(result.text) : result.text;
+        } catch (parseError) {
+            console.error("JSON 解析失敗，原始文字為:", result.text);
+            throw new Error("AI 回傳格式不正確");
+        }
+
+        // 確保 insights 與 suggestions 存在，避免 renderAIHTML 報錯
+        if (finalData && finalData.insights && finalData.suggestions) {
+            renderAIHTML(finalData);
+        } else {
+            throw new Error("回傳資料缺少必要欄位");
+        }
 
     } catch (err) {
-        console.error(err);
+        console.error("前端解析錯誤:", err);
         aiDisplayArea.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs font-bold">
-            ⚠️ 分析載入失敗。請檢查 Netlify GEMINI_KEY 環境變數。</div>`;
+            ⚠️ 分析載入失敗：${err.message}</div>`;
     } finally {
         aiLoading.classList.add('hidden');
     }
