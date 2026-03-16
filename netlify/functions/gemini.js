@@ -4,12 +4,10 @@ export async function handler(event, context) {
   console.log("==== Gemini Function Start ====");
 
   const GEMINI_KEY = process.env.GEMINI_KEY;
-  console.log("GEMINI_KEY exists?", !!GEMINI_KEY);
-
   if (!GEMINI_KEY) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "GEMINI_KEY is missing in environment variables." })
+      body: JSON.stringify({ error: "GEMINI_KEY is missing." })
     };
   }
 
@@ -18,47 +16,42 @@ export async function handler(event, context) {
     const body = JSON.parse(event.body);
     prompt = body.prompt;
   } catch (e) {
-    console.error("Failed to parse body:", e);
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "Invalid JSON body." })
-    };
+    return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON body." }) };
   }
 
-  console.log("Received prompt:", prompt);
-
-  if (!prompt) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "Missing prompt parameter." })
-    };
-  }
+  // 1. 使用正確的 Gemini 1.5 Flash 端點 (速度快且適合分析資料)
+  // 2. 將 API Key 放在 URL 參數中
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
 
   try {
-    // Gemini API endpoint (假設是 Google Bard / Gemini v1 endpoint)
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText", {
+    const response = await fetch(API_URL, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GEMINI_KEY}`,
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt: {
-          text: prompt
-        },
-        temperature: 0.7,
-        maxOutputTokens: 500
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          // 強制模型回傳純 JSON 格式
+          responseMimeType: "application/json"
+        }
       })
     });
 
     const data = await response.json();
-    console.log("API response received:", data);
+    console.log("API response received:", JSON.stringify(data));
 
-    // Gemini 回傳通常在 data.candidates[0].output
-    const text = data?.candidates?.[0]?.output || "No output from Gemini API";
+    if (data.error) {
+        throw new Error(data.error.message);
+    }
+
+    // 擷取 Gemini 1.5 的回傳文字
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
 
     return {
       statusCode: 200,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text })
     };
 
@@ -66,7 +59,7 @@ export async function handler(event, context) {
     console.error("Error calling Gemini API:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Failed to call Gemini API." })
+      body: JSON.stringify({ error: err.message })
     };
   }
 }
