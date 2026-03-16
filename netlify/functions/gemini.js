@@ -1,43 +1,51 @@
-const fetch = require('node-fetch');
+// netlify/functions/gemini.js
+const fetch = require("node-fetch");
 
-exports.handler = async (event, context) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
-  }
-
-  const { prompt } = JSON.parse(event.body);
-  const apiKey = process.env.GEMINI_KEY;
-
-  if (!apiKey) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'GEMINI_KEY is not set' }),
-    };
-  }
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
+exports.handler = async function (event, context) {
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" }
-      }),
+    let params;
+
+    // 如果是 GET，就從 queryStringParameters 取值
+    // 如果是 POST，就從 body 取值
+    if (event.httpMethod === "GET") {
+      params = event.queryStringParameters || {};
+    } else if (event.httpMethod === "POST") {
+      params = event.body ? JSON.parse(event.body) : {};
+    } else {
+      return {
+        statusCode: 405,
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      };
+    }
+
+    // 這裡示範用一個必填參數 siteId
+    const siteId = params.siteId;
+    if (!siteId) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Missing siteId parameter" }),
+      };
+    }
+
+    // 你的 Gemini API 呼叫
+    const response = await fetch(`https://api.gemini.com/insight?site=${siteId}`, {
+      headers: {
+        "Authorization": `Bearer ${process.env.GEMINI_KEY}`,
+        "Content-Type": "application/json",
+      },
     });
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(data),
     };
   } catch (error) {
+    console.error(error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to fetch from Gemini' }),
+      body: JSON.stringify({ error: "Internal Server Error", detail: error.message }),
     };
   }
 };
