@@ -22,40 +22,34 @@ export async function handler(event, context) {
   // 修正點 1: 改用 v1 版本並確保模型名稱格式正確 (gemini-1.5-flash)
   const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
 
-  try {
+try {
     const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }]
-        }],
-        // 修正點 2: 先移除 responseMimeType，部分舊版環境會因為此參數噴錯
-        // 我們改在 Prompt 裡加強要求
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 800
-        }
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, responseMimeType: "application/json" }
       })
     });
 
     const data = await response.json();
-    
+
     if (data.error) {
-        console.error("Gemini API Error Detail:", data.error);
-        throw new Error(data.error.message);
+      console.error("Gemini Error:", data.error);
+      return { statusCode: 500, body: JSON.stringify({ error: data.error.message }) };
     }
 
-    // 擷取內容
-    let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    // 檢查是否有被安全攔截
+    if (!data.candidates || data.candidates.length === 0) {
+      return { statusCode: 200, body: JSON.stringify({ text: '{"insights":["數據分析受限"],"suggestions":["請檢查資料格式"]}' }) };
+    }
 
-    // 修正點 3: 額外處理可能出現的 Markdown 程式碼區塊 (```json ... ```)
-    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
+    let text = data.candidates[0].content.parts[0].text;
+    
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text })
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ text }) // 這裡直接回傳文字，由前端 parse
     };
 
   } catch (err) {
