@@ -1,50 +1,66 @@
-import fetch from "node-fetch";
+import fetch from 'node-fetch';
 
 export async function handler(event, context) {
+  console.log("==== Gemini Function Start ====");
+
+  const GEMINI_KEY = process.env.GEMINI_KEY;
+  console.log("GEMINI_KEY exists?", !!GEMINI_KEY);
+
+  if (!GEMINI_KEY) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "GEMINI_KEY is missing in environment variables." })
+    };
+  }
+
+  let prompt = "";
   try {
-    // 取得前端傳來的 prompt
-    const { prompt } = JSON.parse(event.body || "{}");
+    const body = JSON.parse(event.body);
+    prompt = body.prompt;
+  } catch (e) {
+    console.error("Failed to parse body:", e);
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Invalid JSON body." })
+    };
+  }
 
-    if (!prompt) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "Missing prompt parameter" }),
-      };
-    }
+  console.log("Received prompt:", prompt);
 
-    // API key 從環境變數拿
-    const apiKey = process.env.GEMINI_KEY;
-    if (!apiKey) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: "Missing GEMINI_KEY environment variable" }),
-      };
-    }
+  if (!prompt) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "Missing prompt parameter." })
+    };
+  }
 
-    // 呼叫 Gemini API
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            { parts: [{ text: prompt }] }
-          ]
-        }),
-      }
-    );
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GEMINI_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 500
+      })
+    });
 
     const data = await response.json();
+    console.log("API response received:", data);
 
     return {
       statusCode: 200,
-      body: JSON.stringify(data),
+      body: JSON.stringify({ text: JSON.stringify(data) })
     };
+
   } catch (err) {
+    console.error("Error calling Gemini API:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
+      body: JSON.stringify({ error: "Failed to call Gemini API." })
     };
   }
 }
