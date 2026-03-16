@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+import fetch from "node-fetch";
 
 export async function handler(event, context) {
   console.log("==== Gemini Function Start ====");
@@ -35,25 +35,31 @@ export async function handler(event, context) {
   }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // Gemini API endpoint (假設是 Google Bard / Gemini v1 endpoint)
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${GEMINI_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4",
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 500
+        prompt: {
+          text: prompt
+        },
+        temperature: 0.7,
+        maxOutputTokens: 500
       })
     });
 
     const data = await response.json();
     console.log("API response received:", data);
 
+    // Gemini 回傳通常在 data.candidates[0].output
+    const text = data?.candidates?.[0]?.output || "No output from Gemini API";
+
     return {
       statusCode: 200,
-      body: JSON.stringify({ text: JSON.stringify(data) })
+      body: JSON.stringify({ text })
     };
 
   } catch (err) {
