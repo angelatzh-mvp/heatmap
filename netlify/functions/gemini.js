@@ -20,7 +20,7 @@ export async function handler(event, context) {
   }
 
   // 修正點 1: 改用 v1 版本並確保模型名稱格式正確 (gemini-1.5-flash)
-  const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+  const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
 
   try {
     const response = await fetch(API_URL, {
