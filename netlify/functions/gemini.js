@@ -19,37 +19,55 @@ export async function handler(event, context) {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON body." }) };
   }
 
-  // 修正點 1: 改用 v1 版本並確保模型名稱格式正確 (gemini-1.5-flash)
-  const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
+  // 修正點 1: 使用 v1beta 端點，這對於 gemini-2.5-flash 較為穩定
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
 
-try {
+  try {
     const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, responseMimeType: "application/json" }
+        // 修正點 2: 移除引發錯誤的 responseMimeType，改由後端手動清理文字
+        generationConfig: { 
+          temperature: 0.7,
+          maxOutputTokens: 1000 
+        }
       })
     });
 
     const data = await response.json();
 
     if (data.error) {
-      console.error("Gemini Error:", data.error);
-      return { statusCode: 500, body: JSON.stringify({ error: data.error.message }) };
+      console.error("Gemini API Error Detail:", data.error);
+      return { 
+        statusCode: response.status || 500, 
+        body: JSON.stringify({ error: data.error.message }) 
+      };
     }
 
-    // 檢查是否有被安全攔截
-    if (!data.candidates || data.candidates.length === 0) {
-      return { statusCode: 200, body: JSON.stringify({ text: '{"insights":["數據分析受限"],"suggestions":["請檢查資料格式"]}' }) };
+    // 檢查是否有被安全過濾或其他原因導致無內容
+    if (!data.candidates || data.candidates.length === 0 || !data.candidates[0].content) {
+      return { 
+        statusCode: 200, 
+        body: JSON.stringify({ text: '{"insights":["分析暫時無法產生"],"suggestions":["請嘗試選擇其他時段或稍後再試"]}' }) 
+      };
     }
 
     let text = data.candidates[0].content.parts[0].text;
     
+    // 修正點 3: 手動清理 Markdown 標籤，確保前端拿到的是純淨的 JSON 字串
+    text = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
+
+    console.log("Cleaned Response Text:", text);
+
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ text }) // 這裡直接回傳文字，由前端 parse
+      headers: { 
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*" 
+      },
+      body: JSON.stringify({ text })
     };
 
   } catch (err) {
