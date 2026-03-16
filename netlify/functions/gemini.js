@@ -19,9 +19,8 @@ export async function handler(event, context) {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON body." }) };
   }
 
-  // 1. 使用正確的 Gemini 1.5 Flash 端點 (速度快且適合分析資料)
-  // 2. 將 API Key 放在 URL 參數中
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+  // 修正點 1: 改用 v1 版本並確保模型名稱格式正確 (gemini-1.5-flash)
+  const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
 
   try {
     const response = await fetch(API_URL, {
@@ -31,23 +30,27 @@ export async function handler(event, context) {
         contents: [{
           parts: [{ text: prompt }]
         }],
+        // 修正點 2: 先移除 responseMimeType，部分舊版環境會因為此參數噴錯
+        // 我們改在 Prompt 裡加強要求
         generationConfig: {
           temperature: 0.7,
-          // 強制模型回傳純 JSON 格式
-          responseMimeType: "application/json"
+          maxOutputTokens: 800
         }
       })
     });
 
     const data = await response.json();
-    console.log("API response received:", JSON.stringify(data));
-
+    
     if (data.error) {
+        console.error("Gemini API Error Detail:", data.error);
         throw new Error(data.error.message);
     }
 
-    // 擷取 Gemini 1.5 的回傳文字
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    // 擷取內容
+    let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+
+    // 修正點 3: 額外處理可能出現的 Markdown 程式碼區塊 (```json ... ```)
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
     return {
       statusCode: 200,
